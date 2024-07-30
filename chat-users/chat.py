@@ -12,52 +12,50 @@ def init():
     connection = pika.BlockingConnection(params)
     channel = connection.channel()
 
-    exchange_name = "chatGroupExchange"
+    exchange_name = "chatUserExchange"
     channel.exchange_declare(
-        exchange=exchange_name, exchange_type="direct", durable=True
+        exchange=exchange_name, exchange_type="fanout", durable=True
     )
 
     channel.close()
     connection.close()
 
 
-def send(message, groupName):
+def send(message, user_id):
     params = pika.URLParameters(url)
     connection = pika.BlockingConnection(params)
     channel = connection.channel()
 
-    channel.basic_publish(
-        exchange="chatGroupExchange", routing_key=groupName, body=message
-    )
+    properties = pika.BasicProperties(user_id=user_id)
+    channel.basic_publish(exchange="chatUserExchange", routing_key="", body=message, properties=properties)
 
     channel.close()
     connection.close()
 
 
-def receive(groupName):
+def receive(queueName):
     params = pika.URLParameters(url)
     connection = pika.BlockingConnection(params)
     channel = connection.channel()
 
-    channel.queue_declare(queue=groupName, auto_delete=False)
-    channel.queue_bind(
-        exchange="chatGroupExchange", queue=groupName, routing_key=groupName
-    )
+    channel.queue_declare(queue=queueName, auto_delete=True, exclusive=True)
+    channel.queue_bind(exchange="chatUserExchange", queue=queueName)
 
-    channel.basic_consume(queue=groupName, on_message_callback=callback, auto_ack=True)
+    channel.basic_consume(queue=queueName, on_message_callback=callback, auto_ack=True)
 
     channel.start_consuming()
 
 
 def callback(ch, method, properties, body):
-    print(body.decode("utf-8"))
+    user_id = getattr(properties, 'user_id', '-')
+    print(user_id + ": " + body.decode("utf-8"))
 
 
 # Main
 if __name__ == "__main__":
+    user_id = input("User ID: ")
     init()
-    groupName = input("Group Name: ")
-    consumer_thread = threading.Thread(target=receive, args=[groupName])
+    consumer_thread = threading.Thread(target=receive, args=[str(os.getpid())])
     consumer_thread.daemon = (
         True  # Set as a daemon so it will be killed once the main thread is dead
     )
@@ -65,4 +63,4 @@ if __name__ == "__main__":
 
     while True:
         message = input()
-        send(message, groupName)
+        send(message, user_id)
