@@ -1,8 +1,10 @@
 import pika
 import threading
 import os
+from dotenv import load_dotenv
 
-url = os.environ(['home'])
+load_dotenv()
+url = os.getenv('rabbitMQURL')
 
 def init():
     params = pika.URLParameters(url)
